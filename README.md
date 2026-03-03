@@ -6,7 +6,7 @@ Rust TeamSpeak 3 bot with:
 - permissions-aware moderation/admin helpers
 - ticket workflow (`$ticket ...`)
 - TTS playback (`$tts ...`)
-- music/radio streaming (`$play`, `$radio`, `$addradio`, `$delradio`, `$editradio`)
+- music/radio streaming (`$play`, `$radio`, `$addradio`, `$delradio`, `$editradio`, `$vol`, `$bass`)
 
 ## Features
 
@@ -133,6 +133,7 @@ Note: build artifacts are generated in `target/` and are ignored by Git.
   - `$play <url>`
   - `$stop`
   - `$vol [0-100]`
+  - `$bass [1-100]`
 - Radio presets:
   - `$radios`
   - `$radio <name>`

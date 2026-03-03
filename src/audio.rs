@@ -11,6 +11,7 @@ use tsproto_packets::packets::{AudioData, CodecType, OutAudio, OutPacket};
 use whatlang::{detect, Lang};
 
 static VOLUME: AtomicU8 = AtomicU8::new(100);
+static BASS: AtomicU8 = AtomicU8::new(1);
 /// When true, TTS is actively playing — music should pause
 static DUCKING: AtomicBool = AtomicBool::new(false);
 
@@ -31,6 +32,14 @@ pub fn get_volume() -> u8 {
     VOLUME.load(Ordering::SeqCst)
 }
 
+pub fn set_bass(v: u8) {
+    BASS.store(v.clamp(1, 100), Ordering::SeqCst);
+}
+
+pub fn get_bass() -> u8 {
+    BASS.load(Ordering::SeqCst)
+}
+
 pub fn set_ducking(active: bool) {
     DUCKING.store(active, Ordering::SeqCst);
 }
@@ -46,6 +55,8 @@ const FRAME_SIZE: usize = 960;
 const TTS_MAX_SEGMENT_CHARS: usize = 240;
 const TTS_SEGMENT_PAUSE_SAMPLES: usize = (48_000 * 120) / 1000;
 const TTS_LEAD_IN_SAMPLES: usize = (48_000 * 50) / 1000;
+const BASS_FILTER_ALPHA: f32 = 0.045;
+const BASS_MAX_BOOST_GAIN: f32 = 1.2;
 
 fn voice_model_path(voice_dir: &str, filename: &str) -> String {
     format!("{}/{}", voice_dir.trim_end_matches('/'), filename)
@@ -568,6 +579,7 @@ pub async fn stream_url_to_ts(
         let mut packet_id: u16 = 0;
         let mut interval = tokio::time::interval(std::time::Duration::from_millis(20));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        let mut bass_low_state = 0.0f32;
 
         // Pre-buffering: Wait until we have at least 1 second of audio
         let mut prebuffered = false;
@@ -610,10 +622,26 @@ pub async fn stream_url_to_ts(
 
             // Apply volume
             let vol = get_volume() as f32 / 100.0;
-            if vol != 1.0 {
-                for s in samples.iter_mut() {
-                    *s = (*s as f32 * vol) as i16;
+
+            // Apply bass boost (1-100) only to music stream.
+            // 1 means neutral (no boost), 100 means strongest boost.
+            let bass_level = get_bass();
+            let bass_gain = if bass_level > 1 {
+                ((bass_level as f32 - 1.0) / 99.0) * BASS_MAX_BOOST_GAIN
+            } else {
+                0.0
+            };
+
+            for s in samples.iter_mut() {
+                let mut sample = *s as f32 * vol;
+
+                bass_low_state += BASS_FILTER_ALPHA * (sample - bass_low_state);
+
+                if bass_gain > 0.0 {
+                    sample += bass_low_state * bass_gain;
                 }
+
+                *s = sample.clamp(i16::MIN as f32, i16::MAX as f32) as i16;
             }
 
             match encoder.encode(&samples, &mut opus_buf) {

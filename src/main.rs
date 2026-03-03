@@ -1500,11 +1500,53 @@ async fn real_main() -> Result<()> {
                                         continue;
                                     }
                                     let content = raw_message.trim_start_matches("$vol").trim();
-                                    if let Ok(v) = content.parse::<u8>() {
-                                        audio::set_volume(v);
-                                        send_private_reply(&mut con, invoker.id, &format!("Volume set to {}%.", v));
-                                    } else {
+                                    if content.is_empty() {
                                         send_private_reply(&mut con, invoker.id, &format!("Current volume: {}%. Use `$vol [0-100]` to change it.", audio::get_volume()));
+                                    } else if let Ok(v) = content.parse::<u8>() {
+                                        if v <= 100 {
+                                            audio::set_volume(v);
+                                            send_private_reply(&mut con, invoker.id, &format!("Volume set to {}%.", v));
+                                        } else {
+                                            send_private_reply(&mut con, invoker.id, "Volume must be between 0 and 100.");
+                                        }
+                                    } else {
+                                        send_private_reply(&mut con, invoker.id, "Invalid value. Use `$vol [0-100]`.");
+                                    }
+                                    continue;
+                                }
+
+                                // $bass — Admin only
+                                if raw_message.starts_with("$bass") {
+                                    if !is_admin {
+                                        send_private_reply(&mut con, invoker.id, admin_denied_msg);
+                                        continue;
+                                    }
+                                    let content = raw_message.trim_start_matches("$bass").trim();
+                                    if content.is_empty() {
+                                        send_private_reply(
+                                            &mut con,
+                                            invoker.id,
+                                            &format!(
+                                                "Current bass: {}%. Use `$bass [1-100]` while music is playing.",
+                                                audio::get_bass()
+                                            ),
+                                        );
+                                    } else if let Ok(v) = content.parse::<u8>() {
+                                        if (1..=100).contains(&v) {
+                                            audio::set_bass(v);
+                                            send_private_reply(
+                                                &mut con,
+                                                invoker.id,
+                                                &format!(
+                                                    "Bass set to {}%. Applied immediately to music playback.",
+                                                    v
+                                                ),
+                                            );
+                                        } else {
+                                            send_private_reply(&mut con, invoker.id, "Bass must be between 1 and 100.");
+                                        }
+                                    } else {
+                                        send_private_reply(&mut con, invoker.id, "Invalid value. Use `$bass [1-100]`.");
                                     }
                                     continue;
                                 }
