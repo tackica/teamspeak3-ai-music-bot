@@ -1,0 +1,78 @@
+# TeamSpeak 3 AI + Music Bot configuration example
+# Copy this file to `config.toml` and fill your own values.
+
+# TeamSpeak server address: host:port
+server_address = "ts3.example.com:9987"
+
+# Bot nickname shown in TeamSpeak
+bot_name = "TS3 AI Bot"
+
+# Optional default channel (ID or exact name).
+channel = "123"
+
+# Identity key file path (generated automatically if missing)
+key_file = "identity.key"
+
+# Disconnect message shown when bot leaves
+disconnect_message = "TS3 AI Bot shutting down. Goodbye!"
+
+# Max responses per second
+rate_limit = 2
+
+# Primary AI endpoint (OpenAI-compatible)
+ai_api_url = "http://127.0.0.1:11434/v1/chat/completions"
+
+# Primary AI API key (recommended to keep empty here and use env var TS3_BOT_AI_API_KEY)
+ai_api_key = ""
+
+# Primary model
+default_model = "llama3.1:8b"
+
+# Fallback AI endpoint
+fallback_api_url = "https://api.openai.com/v1/chat/completions"
+
+# Fallback AI API key (recommended to keep empty here and use env var TS3_BOT_FALLBACK_API_KEY)
+fallback_api_key = ""
+
+# Fallback model
+fallback_model = "gpt-4o-mini"
+
+# AI timeout per request (seconds)
+ai_timeout_secs = 90
+
+# TeamSpeak UID lists
+admin_uids = ["YOUR_ADMIN_UID_BASE64"]
+moderator_uids = []
+
+# Audit log file path
+audit_log_file = "audit.log"
+
+# Prompt workspace settings
+prompt_workspace_dir = "workspace"
+prompt_file_max_chars = 6000
+prompt_total_max_chars = 24000
+
+# Auto-learning settings
+auto_learning_enabled = true
+auto_learning_note_limit = 12
+
+# Data files
+tickets_file = "tickets.json"
+identities_file = "identities.json"
+radios_file = "radios.json"
+
+# TeamSpeak channel/admin behavior
+channel_admin_group_id = 24
+channel_order_anchor_id = 328
+code_output_channel_id = 51494
+
+# TTS / Piper runtime paths
+piper_binary_path = "piper/piper/piper"
+piper_voice_dir = "piper/voices"
+
+# Self-assignable server groups for regular users
+[allowed_server_groups]
+"CS 1.6" = 56
+"CS2" = 57
+"Valorant" = 180
+"Minecraft" = 112

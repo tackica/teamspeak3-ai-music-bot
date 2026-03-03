@@ -1,0 +1,27 @@
+# Rust
+/target/
+
+# Local runtime config and secrets
+/config.toml
+/.env
+/.env.*
+
+# Runtime state / private data
+/identity.key
+/identities.json
+/tickets.json
+/radios.json
+/instances.json
+/workspace/
+
+# Logs
+/*.log
+/audit.log
+/bot.log
+/cargo_build.log
+
+# Local tooling/editor
+/.vscode/
+
+# Optional local voice/model runtime assets
+/piper/
