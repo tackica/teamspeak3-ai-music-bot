@@ -125,6 +125,18 @@ pub struct BotConfig {
     /// Directory containing Piper voice model files.
     #[serde(default = "default_piper_voice_dir")]
     pub piper_voice_dir: String,
+
+    /// Binary name or absolute path for ffmpeg.
+    #[serde(default = "default_ffmpeg_binary_path")]
+    pub ffmpeg_binary_path: String,
+
+    /// Binary name or absolute path for yt-dlp.
+    #[serde(default = "default_yt_dlp_binary_path")]
+    pub yt_dlp_binary_path: String,
+
+    /// Initial volume (0-100) when starting music/radio playback.
+    #[serde(default = "default_music_start_volume")]
+    pub music_start_volume: u8,
 }
 
 // ── Defaults ────────────────────────────────────────────────
@@ -249,6 +261,18 @@ fn default_piper_voice_dir() -> String {
     "piper/voices".into()
 }
 
+fn default_ffmpeg_binary_path() -> String {
+    "ffmpeg".into()
+}
+
+fn default_yt_dlp_binary_path() -> String {
+    "yt-dlp".into()
+}
+
+fn default_music_start_volume() -> u8 {
+    5
+}
+
 impl Default for BotConfig {
     fn default() -> Self {
         Self {
@@ -282,6 +306,9 @@ impl Default for BotConfig {
             code_output_channel_id: default_code_output_channel_id(),
             piper_binary_path: default_piper_binary_path(),
             piper_voice_dir: default_piper_voice_dir(),
+            ffmpeg_binary_path: default_ffmpeg_binary_path(),
+            yt_dlp_binary_path: default_yt_dlp_binary_path(),
+            music_start_volume: default_music_start_volume(),
         }
     }
 }
@@ -326,6 +353,18 @@ fn apply_env_overrides(mut config: BotConfig) -> BotConfig {
     if let Ok(value) = env::var("TS3_BOT_CHANNEL") {
         if !value.trim().is_empty() {
             config.channel = Some(value);
+        }
+    }
+
+    if let Ok(value) = env::var("TS3_BOT_FFMPEG_PATH") {
+        if !value.trim().is_empty() {
+            config.ffmpeg_binary_path = value;
+        }
+    }
+
+    if let Ok(value) = env::var("TS3_BOT_YT_DLP_PATH") {
+        if !value.trim().is_empty() {
+            config.yt_dlp_binary_path = value;
         }
     }
 

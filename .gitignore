@@ -5,6 +5,7 @@
 /config.toml
 /.env
 /.env.*
+!/.env.example
 
 # Runtime state / private data
 /identity.key

@@ -34,7 +34,7 @@ impl IdentityStore {
 
     pub fn record_name(&mut self, uid: &str, name: &str) -> Result<bool> {
         let entry = self.data.identities.entry(uid.to_string()).or_default();
-        
+
         let should_add = match entry.last() {
             Some(last_name) => last_name != name,
             None => true,
@@ -45,7 +45,7 @@ impl IdentityStore {
             self.save()?;
             return Ok(true);
         }
-        
+
         Ok(false)
     }
 

@@ -108,14 +108,13 @@ impl ServerSnapshot {
             };
 
         // Helper to resolve server group IDs to names
-        let resolve_groups = |group_ids: &std::collections::HashSet<tsproto_types::ServerGroupId>| -> Vec<String> {
-            group_ids
-                .iter()
-                .filter_map(|gid| {
-                    state.server_groups.get(gid).map(|g| g.name.to_string())
-                })
-                .collect()
-        };
+        let resolve_groups =
+            |group_ids: &std::collections::HashSet<tsproto_types::ServerGroupId>| -> Vec<String> {
+                group_ids
+                    .iter()
+                    .filter_map(|gid| state.server_groups.get(gid).map(|g| g.name.to_string()))
+                    .collect()
+            };
 
         // Helper to resolve channel group ID to name
         let resolve_channel_group = |cgid: tsproto_types::ChannelGroupId| -> String {
@@ -125,8 +124,6 @@ impl ServerSnapshot {
                 .map(|g| g.name.to_string())
                 .unwrap_or_else(|| format!("Group {}", cgid.0))
         };
-
-
 
         // Online users (skip the bot itself)
         let mut online_users = Vec::new();
@@ -141,15 +138,14 @@ impl ServerSnapshot {
                 .unwrap_or_else(|| "?".into());
 
             // OptionalClientData
-            let (platform, version, connections_total) =
-                match &client.optional_data {
-                    Some(opt) => (
-                        Some(opt.platform.to_string()),
-                        Some(opt.version.to_string()),
-                        Some(opt.connections_total),
-                    ),
-                    None => (None, None, None),
-                };
+            let (platform, version, connections_total) = match &client.optional_data {
+                Some(opt) => (
+                    Some(opt.platform.to_string()),
+                    Some(opt.version.to_string()),
+                    Some(opt.connections_total),
+                ),
+                None => (None, None, None),
+            };
 
             // ConnectionClientData (needs getconnectioninfo)
             let (ping_ms, idle_secs, client_address, packetloss_total, connected_secs) =
@@ -196,18 +192,18 @@ impl ServerSnapshot {
             .channels
             .iter()
             .map(|(cid, ch)| {
-                let client_count = state
-                    .clients
-                    .values()
-                    .filter(|c| c.channel == *cid)
-                    .count();
+                let client_count = state.clients.values().filter(|c| c.channel == *cid).count();
                 let is_permanent = matches!(ch.channel_type, tsclientlib::ChannelType::Permanent);
                 ChannelInfo {
                     id: cid.0,
                     name: ch.name.to_string(),
                     client_count,
                     is_permanent,
-                    topic: ch.topic.as_ref().filter(|t| !t.is_empty()).map(|t| t.to_string()),
+                    topic: ch
+                        .topic
+                        .as_ref()
+                        .filter(|t| !t.is_empty())
+                        .map(|t| t.to_string()),
                     max_clients: ch.max_clients.and_then(|m| match m {
                         tsclientlib::MaxClients::Unlimited => None,
                         tsclientlib::MaxClients::Inherited => None,
@@ -300,11 +296,21 @@ impl ServerSnapshot {
                     tags.push("AFK".to_string());
                 }
             }
-            if u.input_muted { tags.push("mic-off".to_string()); }
-            if u.output_muted { tags.push("sound-off".to_string()); }
-            if u.is_recording { tags.push("RECORDING".to_string()); }
-            if u.is_priority_speaker { tags.push("priority".to_string()); }
-            if u.is_channel_commander { tags.push("commander".to_string()); }
+            if u.input_muted {
+                tags.push("mic-off".to_string());
+            }
+            if u.output_muted {
+                tags.push("sound-off".to_string());
+            }
+            if u.is_recording {
+                tags.push("RECORDING".to_string());
+            }
+            if u.is_priority_speaker {
+                tags.push("priority".to_string());
+            }
+            if u.is_channel_commander {
+                tags.push("commander".to_string());
+            }
 
             let tag_str = if tags.is_empty() {
                 String::new()
@@ -312,19 +318,52 @@ impl ServerSnapshot {
                 format!(" [{}]", tags.join(", "))
             };
 
-            let country = if u.country_code.is_empty() { String::new() } else { format!(" ({})", u.country_code) };
+            let country = if u.country_code.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", u.country_code)
+            };
             let platform = u.platform.as_deref().unwrap_or("");
-            let platform_str = if platform.is_empty() { String::new() } else { format!(" | {}", platform) };
-            let groups = if u.server_groups.is_empty() { String::new() } else { format!(" | Groups: {}", u.server_groups.join(", ")) };
+            let platform_str = if platform.is_empty() {
+                String::new()
+            } else {
+                format!(" | {}", platform)
+            };
+            let groups = if u.server_groups.is_empty() {
+                String::new()
+            } else {
+                format!(" | Groups: {}", u.server_groups.join(", "))
+            };
             let ch_group = format!(" | ChGroup: {}", u.channel_group);
-            let desc = if u.description.is_empty() { String::new() } else { format!(" | Desc: \"{}\"", u.description) };
-            let ver = u.version.as_deref().map(|v| format!(" | v{}", v)).unwrap_or_default();
-            let conns = u.connections_total.map(|c| format!(" | Connections: {}", c)).unwrap_or_default();
+            let desc = if u.description.is_empty() {
+                String::new()
+            } else {
+                format!(" | Desc: \"{}\"", u.description)
+            };
+            let ver = u
+                .version
+                .as_deref()
+                .map(|v| format!(" | v{}", v))
+                .unwrap_or_default();
+            let conns = u
+                .connections_total
+                .map(|c| format!(" | Connections: {}", c))
+                .unwrap_or_default();
 
             out.push_str(&format!(
                 "- {}{}{} in \"{}\" (ID {}, DBID {}){}{}{}{}{}{}\n",
-                u.name, country, tag_str, u.channel_name, u.channel_id,
-                u.database_id, platform_str, groups, ch_group, desc, ver, conns
+                u.name,
+                country,
+                tag_str,
+                u.channel_name,
+                u.channel_id,
+                u.database_id,
+                platform_str,
+                groups,
+                ch_group,
+                desc,
+                ver,
+                conns
             ));
 
             // Admin-only connection data
@@ -357,14 +396,27 @@ impl ServerSnapshot {
         out.push_str("\n=== CHANNELS ===\n");
         for (i, ch) in self.channel_tree.iter().enumerate() {
             if i >= 40 {
-                out.push_str(&format!("... and {} more channels\n", self.channel_tree.len() - 40));
+                out.push_str(&format!(
+                    "... and {} more channels\n",
+                    self.channel_tree.len() - 40
+                ));
                 break;
             }
             let ch_type = if ch.is_permanent { "perm" } else { "temp" };
-            let topic = ch.topic.as_deref().map(|t| format!(" topic=\"{}\"", t)).unwrap_or_default();
-            let max = ch.max_clients.map(|m| format!(" max={}", m)).unwrap_or_default();
+            let topic = ch
+                .topic
+                .as_deref()
+                .map(|t| format!(" topic=\"{}\"", t))
+                .unwrap_or_default();
+            let max = ch
+                .max_clients
+                .map(|m| format!(" max={}", m))
+                .unwrap_or_default();
             let pw = if ch.has_password { " 🔒" } else { "" };
-            let tp = ch.needed_talk_power.map(|t| format!(" tp={}", t)).unwrap_or_default();
+            let tp = ch
+                .needed_talk_power
+                .map(|t| format!(" tp={}", t))
+                .unwrap_or_default();
             out.push_str(&format!(
                 "- \"{}\" (ID {}, {} users, {}{}{}{}{})\n",
                 ch.name, ch.id, ch.client_count, ch_type, topic, max, pw, tp
@@ -471,11 +523,9 @@ impl InvokerContext {
 
         let message_source = match target {
             MessageTarget::Client(_) => MessageSource::Direct,
-            MessageTarget::Channel => {
-                MessageSource::Channel {
-                    channel_name: channel_name.clone(),
-                }
-            }
+            MessageTarget::Channel => MessageSource::Channel {
+                channel_name: channel_name.clone(),
+            },
             MessageTarget::Server => MessageSource::Server,
             _ => MessageSource::Direct,
         };
@@ -500,17 +550,48 @@ impl InvokerContext {
 
     /// Render as text for the system prompt.
     pub fn to_prompt_text(&self) -> String {
-        let country = if self.country_code.is_empty() { String::new() } else { format!(" | Country: {}", self.country_code) };
-        let groups = if self.server_groups.is_empty() { String::new() } else { format!("\nServer Groups: {}", self.server_groups.join(", ")) };
-        let ch_group = if self.channel_group.is_empty() { String::new() } else { format!(" | ChGroup: {}", self.channel_group) };
-        let platform = self.platform.as_deref().map(|p| format!(" | Platform: {}", p)).unwrap_or_default();
-        let desc = if self.description.is_empty() { String::new() } else { format!("\nDescription: {}", self.description) };
+        let country = if self.country_code.is_empty() {
+            String::new()
+        } else {
+            format!(" | Country: {}", self.country_code)
+        };
+        let groups = if self.server_groups.is_empty() {
+            String::new()
+        } else {
+            format!("\nServer Groups: {}", self.server_groups.join(", "))
+        };
+        let ch_group = if self.channel_group.is_empty() {
+            String::new()
+        } else {
+            format!(" | ChGroup: {}", self.channel_group)
+        };
+        let platform = self
+            .platform
+            .as_deref()
+            .map(|p| format!(" | Platform: {}", p))
+            .unwrap_or_default();
+        let desc = if self.description.is_empty() {
+            String::new()
+        } else {
+            format!("\nDescription: {}", self.description)
+        };
         let mut status = Vec::new();
         if self.is_away {
-            status.push(self.away_message.as_deref().map(|m| format!("AFK: {}", m)).unwrap_or_else(|| "AFK".to_string()));
+            status.push(
+                self.away_message
+                    .as_deref()
+                    .map(|m| format!("AFK: {}", m))
+                    .unwrap_or_else(|| "AFK".to_string()),
+            );
         }
-        if self.input_muted { status.push("mic-off".to_string()); }
-        let status_str = if status.is_empty() { String::new() } else { format!("\nStatus: {}", status.join(", ")) };
+        if self.input_muted {
+            status.push("mic-off".to_string());
+        }
+        let status_str = if status.is_empty() {
+            String::new()
+        } else {
+            format!("\nStatus: {}", status.join(", "))
+        };
 
         format!(
             "=== INVOKER ===\nName: {} | UID: {} | DBID: {} | Channel: \"{}\" (ID {}){}{}{}\nMessage type: {}{}{}{}",

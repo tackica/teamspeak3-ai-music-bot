@@ -1,17 +1,17 @@
 mod actions;
 mod ai;
+mod audio;
 mod audit;
 mod channels;
 mod clients;
 mod config;
 mod context;
 mod identity;
-mod permissions;
-mod prompts;
-mod prompt_workspace;
 mod learning;
+mod permissions;
+mod prompt_workspace;
+mod prompts;
 mod tickets;
-mod audio;
 
 use std::fs;
 use std::path::Path;
@@ -26,10 +26,12 @@ use futures::prelude::*;
 use tracing::{debug, error, info, warn};
 
 use tsclientlib::events::{Event, PropertyId};
-use tsclientlib::{Connection, DisconnectOptions, Identity, MessageTarget, OutCommandExt, Reason, StreamItem};
+use tsclientlib::{
+    Connection, DisconnectOptions, Identity, MessageTarget, OutCommandExt, Reason, StreamItem,
+};
 
 use crate::actions::{get_reply_text, parse_ai_response, BotAction};
-use crate::ai::{ChatMessage, AiClient};
+use crate::ai::{AiClient, ChatMessage};
 use crate::config::load_config;
 
 // ─── CLI Arguments ──────────────────────────────────────────
@@ -72,7 +74,8 @@ impl RateLimiter {
         let one_second = Duration::from_secs(1);
 
         // Remove timestamps older than 1 second
-        self.timestamps.retain(|t| now.duration_since(*t) <= one_second);
+        self.timestamps
+            .retain(|t| now.duration_since(*t) <= one_second);
 
         if self.timestamps.len() >= self.max_per_second as usize {
             false
@@ -194,7 +197,10 @@ async fn real_main() -> Result<()> {
     }
 
     // ── Connect to server ───────────────────────────────────
-    info!("Connecting to TeamSpeak server at {}...", cfg.server_address);
+    info!(
+        "Connecting to TeamSpeak server at {}...",
+        cfg.server_address
+    );
     let mut con = con_config.connect()?;
 
     // Wait for initial book events (server state sync)
@@ -213,7 +219,10 @@ async fn real_main() -> Result<()> {
     {
         use tsclientlib::messages::c2s::OutChannelSubscribeAllMessage;
         use tsclientlib::messages::OutMessageTrait;
-        if let Err(e) = OutChannelSubscribeAllMessage::new().to_packet().send(&mut con) {
+        if let Err(e) = OutChannelSubscribeAllMessage::new()
+            .to_packet()
+            .send(&mut con)
+        {
             warn!("Failed to subscribe to all channels: {}", e);
         }
     }
@@ -233,13 +242,13 @@ async fn real_main() -> Result<()> {
             info!(channel_id, "Moving bot to configured channel by ID");
             if let Ok(state) = con.get_state() {
                 let own_client_id = state.own_client;
-                let msg = tsclientlib::messages::c2s::OutClientMoveMessage::new(&mut std::iter::once(
-                    tsclientlib::messages::c2s::OutClientMovePart {
+                let msg = tsclientlib::messages::c2s::OutClientMoveMessage::new(
+                    &mut std::iter::once(tsclientlib::messages::c2s::OutClientMovePart {
                         client_id: own_client_id,
                         channel_id: tsclientlib::ChannelId(channel_id),
                         channel_password: None,
-                    }
-                ));
+                    }),
+                );
                 use tsclientlib::messages::OutMessageTrait;
                 if let Err(e) = msg.to_packet().send(&mut con) {
                     warn!(error = %e, "Failed to move bot to configured channel");
@@ -270,10 +279,14 @@ async fn real_main() -> Result<()> {
     let mut rate_limiter = RateLimiter::new(cfg.rate_limit);
 
     // Initialize local ticket system
-    let ticket_store = Arc::new(tokio::sync::RwLock::new(tickets::TicketStore::new(&cfg.tickets_file)));
-    
+    let ticket_store = Arc::new(tokio::sync::RwLock::new(tickets::TicketStore::new(
+        &cfg.tickets_file,
+    )));
+
     // Initialize identity tracking system
-    let identity_store = Arc::new(tokio::sync::RwLock::new(identity::IdentityStore::new(&cfg.identities_file)));
+    let identity_store = Arc::new(tokio::sync::RwLock::new(identity::IdentityStore::new(
+        &cfg.identities_file,
+    )));
 
     // Initialize audit logger
     let audit_logger = Arc::new(audit::AuditLogger::new(&cfg.audit_log_file));
@@ -283,18 +296,24 @@ async fn real_main() -> Result<()> {
     let tts_config = audio::TtsConfig {
         piper_path: cfg.piper_binary_path.clone(),
         voice_dir: cfg.piper_voice_dir.clone(),
+        ffmpeg_path: cfg.ffmpeg_binary_path.clone(),
+        yt_dlp_path: cfg.yt_dlp_binary_path.clone(),
+        music_start_volume: cfg.music_start_volume,
     };
 
     // ── Main event loop ─────────────────────────────────────
     let (ai_tx, mut ai_rx) = tokio::sync::mpsc::channel::<AiActionResult>(100);
-    let (ai_queue_tx, mut ai_queue_rx) = tokio::sync::mpsc::channel::<QueuedAiRequest>(GLOBAL_AI_QUEUE_CAPACITY);
-    let (audio_tx, mut audio_rx) = tokio::sync::mpsc::channel::<tsproto_packets::packets::OutPacket>(500);
-    
+    let (ai_queue_tx, mut ai_queue_rx) =
+        tokio::sync::mpsc::channel::<QueuedAiRequest>(GLOBAL_AI_QUEUE_CAPACITY);
+    let (audio_tx, mut audio_rx) =
+        tokio::sync::mpsc::channel::<tsproto_packets::packets::OutPacket>(500);
+
     // List of channels waiting for their creation event to be processed
     let mut pending_creations = Vec::<PendingCreation>::new();
 
     // Track where users were before being moved (for MOVE_CLIENT_RETURN)
-    let mut pre_move_channels: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+    let mut pre_move_channels: std::collections::HashMap<String, String> =
+        std::collections::HashMap::new();
 
     // Global AI queue metrics
     let pending_ai_requests = Arc::new(AtomicUsize::new(0));
@@ -650,7 +669,7 @@ async fn real_main() -> Result<()> {
                                     Err(e) => Err(anyhow::anyhow!(e)),
                                 }
                             };
-                            
+
                             match target_db_id_res {
                                 Ok(db_id) => {
                                     if let Err(e) = channels::set_channel_admin(
@@ -759,7 +778,7 @@ async fn real_main() -> Result<()> {
                                 },
                                 Err(e) => Err(anyhow::anyhow!(e)),
                             };
-                            
+
                             match target_channel_res {
                                 Ok((own_client_id, target_channel_id)) => {
                                     let msg = tsclientlib::messages::c2s::OutClientMoveMessage::new(&mut std::iter::once(
@@ -864,7 +883,7 @@ async fn real_main() -> Result<()> {
                             let tts_text_clone = text.clone();
                             let tts_tx = audio_tx.clone();
                             let tts_config_clone = tts_config.clone();
-                            
+
                             tokio::spawn(async move {
                                 match audio::fetch_tts_pcm(&tts_text_clone, &tts_config_clone).await {
                                     Ok(pcm) => {
@@ -997,11 +1016,12 @@ async fn real_main() -> Result<()> {
                             }
                             let new_stop_flag = Arc::new(AtomicBool::new(false));
                             current_music_stop_flag = Some(new_stop_flag.clone());
-                            
+
                             let music_tx = audio_tx.clone();
                             let url_clone = url.clone();
+                            let tts_config_clone = tts_config.clone();
                             tokio::spawn(async move {
-                                if let Err(e) = audio::stream_url_to_ts(url_clone, music_tx, new_stop_flag).await {
+                                if let Err(e) = audio::stream_url_to_ts(url_clone, music_tx, new_stop_flag, tts_config_clone).await {
                                     error!("Failed to start music stream: {}", e);
                                 }
                             });
@@ -1164,7 +1184,7 @@ async fn real_main() -> Result<()> {
                                                 visible_tickets.push(t);
                                             }
                                         }
-                                        
+
                                         if visible_tickets.is_empty() {
                                             send_private_reply(&mut con, invoker.id, "No active tickets found.");
                                         } else {
@@ -1203,7 +1223,7 @@ async fn real_main() -> Result<()> {
                                                     match store.reply_ticket(id, response.clone(), is_admin) {
                                                         Ok(Some(ticket)) => {
                                                             send_private_reply(&mut con, invoker.id, &format!("Reply saved for ticket #{}.", id));
-                                                            
+
                                                             if is_admin {
                                                                 let mut target_cid = None;
                                                                 if let Ok(state) = con.get_state() {
@@ -1252,7 +1272,7 @@ async fn real_main() -> Result<()> {
                                             match store.claim_ticket(id, invoker_name.clone()) {
                                                 Ok(Some(_ticket)) => {
                                                     send_private_reply(&mut con, invoker.id, &format!("You claimed ticket #{}.", id));
-                                                    
+
                                                     let alert_msg = format!("Admin {} claimed ticket #{}", invoker_name, id);
                                                     let mut admin_cids = Vec::new();
                                                     if let Ok(state) = con.get_state() {
@@ -1277,7 +1297,7 @@ async fn real_main() -> Result<()> {
                                     } else if parts[0] == "history" && parts.len() > 1 && is_admin {
                                         let target_name = parts[1..].join(" ");
                                         let history_tickets = store.get_user_history(&target_name);
-                                        
+
                                         if history_tickets.is_empty() {
                                             send_private_reply(&mut con, invoker.id, &format!("No ticket history found for user: {}", target_name));
                                         } else {
@@ -1307,21 +1327,21 @@ async fn real_main() -> Result<()> {
                                         }
                                     } else {
                                         // Fallback: This is not a known command -> Treat as creating a new ticket
-                                        
+
                                         // Restrict users to 1 open ticket at a time to prevent spam
                                         let has_open_ticket = if !is_admin {
                                             store.get_open_tickets().iter().any(|t| t.creator_uid == user_uid)
                                         } else {
                                             false
                                         };
-                                        
+
                                         if has_open_ticket {
                                             send_private_reply(&mut con, invoker.id, "You already have one open ticket. Please wait for an admin reply or close it with `$ticket close <id>` before opening a new ticket.");
                                         } else {
                                             match store.create_ticket(user_uid.clone(), invoker_name.clone(), content.to_string()) {
                                                 Ok(id) => {
                                                     send_private_reply(&mut con, invoker.id, &format!("Your ticket has been created successfully as **#{}**. Admins have been notified and will respond soon.", id));
-                                                    
+
                                                     let alert_msg = format!("NEW TICKET #{}\nUser: {}\nIssue: {}", id, invoker_name, content);
                                                     let mut admin_cids = Vec::new();
                                                     if let Ok(state) = con.get_state() {
@@ -1423,7 +1443,7 @@ async fn real_main() -> Result<()> {
                                     }
                                     let url = raw_message.trim_start_matches("$play ").trim().to_string();
                                     info!(url = %url, invoker = %invoker_name, "Manual play requested");
-                                    
+
                                     // Stop previous
                                     if let Some(old_flag) = current_music_stop_flag.take() {
                                         old_flag.store(true, Ordering::SeqCst);
@@ -1432,9 +1452,10 @@ async fn real_main() -> Result<()> {
                                     current_music_stop_flag = Some(new_stop_flag.clone());
                                     let music_tx = audio_tx.clone();
                                     let url_clone = url.clone();
-                                    
+                                    let tts_config_clone = tts_config.clone();
+
                                     tokio::spawn(async move {
-                                        if let Err(e) = audio::stream_url_to_ts(url_clone, music_tx, new_stop_flag).await {
+                                        if let Err(e) = audio::stream_url_to_ts(url_clone, music_tx, new_stop_flag, tts_config_clone).await {
                                             error!("Failed to start music stream: {}", e);
                                         }
                                     });
@@ -1472,7 +1493,7 @@ async fn real_main() -> Result<()> {
                                 }
 
                                 // ====== RADIO PLAYLIST COMMANDS (Admin only) ======
-                                
+
                                 // $radios — List all radio stations (anyone can see)
                                 if raw_message == "$radios" {
                                     let radios = load_radios(&radios_file);
@@ -1497,13 +1518,13 @@ async fn real_main() -> Result<()> {
                                     }
                                     let name = raw_message.trim_start_matches("$radio ").trim();
                                     let radios = load_radios(&radios_file);
-                                    
+
                                     // Case-insensitive search
                                     let found = radios.iter().find(|(k, _)| k.to_lowercase() == name.to_lowercase());
-                                    
+
                                     if let Some((station_name, url)) = found {
                                         info!(station = %station_name, url = %url, invoker = %invoker_name, "Radio play requested");
-                                        
+
                                         // Stop previous
                                         if let Some(old_flag) = current_music_stop_flag.take() {
                                             old_flag.store(true, Ordering::SeqCst);
@@ -1512,9 +1533,10 @@ async fn real_main() -> Result<()> {
                                         current_music_stop_flag = Some(new_stop_flag.clone());
                                         let music_tx = audio_tx.clone();
                                         let url_clone = url.clone();
-                                        
+                                        let tts_config_clone = tts_config.clone();
+
                                         tokio::spawn(async move {
-                                            if let Err(e) = audio::stream_url_to_ts(url_clone, music_tx, new_stop_flag).await {
+                                            if let Err(e) = audio::stream_url_to_ts(url_clone, music_tx, new_stop_flag, tts_config_clone).await {
                                                 error!("Failed to start radio stream: {}", e);
                                             }
                                         });
@@ -1802,14 +1824,14 @@ async fn real_main() -> Result<()> {
                                         }
                                     }
                                 }
-                                
+
                                 if let Some((id, name)) = to_welcome {
                                     let welcome_msg = format!(
                                         "Hello [b]{}[/b]!\n\n[u]How to use this bot:[/u]\n\
                                         - Create a permanent room for yourself\n\
                                         - Assign an allowed server group to yourself\n\
                                         - Open a support ticket with `$ticket your problem`\n\n\
-                                        Type `$ask` followed by your question/command.", 
+                                        Type `$ask` followed by your question/command.",
                                         name
                                     );
                                     send_private_reply(&mut con, id, &welcome_msg);
@@ -1845,7 +1867,7 @@ async fn real_main() -> Result<()> {
                                             if let Some(ref uid_buf) = client.uid {
                                                 use base64::Engine;
                                                 let current_uid = base64::engine::general_purpose::STANDARD.encode(&uid_buf.0);
-                                                
+
                                                 // Record name for Identity Tracking on connection
                                                 {
                                                     let mut id_store = identity_store.write().await;
@@ -1859,7 +1881,7 @@ async fn real_main() -> Result<()> {
                                                             - Create a permanent room for yourself\n\
                                                             - Assign an allowed server group to yourself\n\
                                                             - Open a support ticket with `$ticket your problem`\n\n\
-                                                            Type `$ask` followed by your question/command.", 
+                                                            Type `$ask` followed by your question/command.",
                                                             client.name
                                                         );
                                                         send_private_reply(&mut con, *client_id, &welcome_msg);
@@ -1870,7 +1892,7 @@ async fn real_main() -> Result<()> {
                                                     let store = ticket_store.read().await;
                                                     store.get_unread_tickets(&current_uid)
                                                 };
-                                                
+
                                                 if !unread_tickets.is_empty() {
                                                     let mut reply = String::from("You have unread admin replies:\n\n");
                                                     for t in unread_tickets {
@@ -1878,7 +1900,7 @@ async fn real_main() -> Result<()> {
                                                         reply.push_str(&format!("**Ticket #{}** - Response:\n{}\n\n", t.id, response_text));
                                                     }
                                                     reply.push_str("Reply with `$ticket reply <id> <text>`.\nClose a ticket with `$ticket close <id>`.");
-                                                    
+
                                                     // Send the notification immediately
                                                     send_private_reply(&mut con, *client_id, &reply);
                                                 }
@@ -1922,7 +1944,7 @@ async fn real_main() -> Result<()> {
 
                             if state.channels.values().any(|c| c.name.to_lowercase() == pending.channel_name.to_lowercase()) {
                                 info!(channel = %pending.channel_name, "Found newly created channel in state, will setup...");
-                                
+
                                 if let Some(client) = state.clients.get(&pending.invoker_id) {
                                     ready_to_setup.push((
                                         idx,
@@ -1943,10 +1965,10 @@ async fn real_main() -> Result<()> {
                         if let Err(e) = clients::move_client(&mut con, &client_name, &channel_name) {
                             warn!(error = %e, channel = %channel_name, "Failed to move creator into new channel");
                         }
-                        
+
                         // Small delay to ensure the server registers the client in the channel
                         tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-                        
+
                         // Then set the admin group
                         if let Err(e) = channels::set_channel_admin(
                             &mut con,
@@ -1956,7 +1978,7 @@ async fn real_main() -> Result<()> {
                         ) {
                             warn!(error = %e, channel = %channel_name, "Failed to set Channel Admin for creator");
                         }
-                        
+
                         // Post-action confirmation from Rust (replaces AI predicting this step)
                         // In pending vector, the invoker_id is available. ready_to_setup only contains idx right now,
                         // so we need the original pending object to get the invoker_id
@@ -2042,11 +2064,7 @@ fn send_reply(con: &mut Connection, target: MessageTarget, message: &str) {
 }
 
 /// Send an alert to all online administrators.
-fn alert_admins(
-    con: &mut Connection,
-    admin_uids: &[String],
-    message: &str,
-) {
+fn alert_admins(con: &mut Connection, admin_uids: &[String], message: &str) {
     let mut online_admins = Vec::new();
     if let Ok(state) = con.get_state() {
         use base64::Engine;
@@ -2059,7 +2077,7 @@ fn alert_admins(
             }
         }
     }
-    
+
     for admin_id in online_admins {
         send_private_reply(con, admin_id, message);
     }
@@ -2152,7 +2170,11 @@ fn build_memory_show_report(workspace_dir: &str, target_uid: &str) -> String {
     report
 }
 
-fn collect_recent_memory_entries(workspace_dir: &str, target_uid: &str, limit: usize) -> Vec<String> {
+fn collect_recent_memory_entries(
+    workspace_dir: &str,
+    target_uid: &str,
+    limit: usize,
+) -> Vec<String> {
     if limit == 0 {
         return Vec::new();
     }
@@ -2203,8 +2225,8 @@ fn truncate_report_chars(input: &str, max_chars: usize) -> String {
 
 /// Send a private message directly to a specific client.
 fn send_private_reply(con: &mut Connection, client_id: tsproto_types::ClientId, message: &str) {
-    use tsclientlib::messages::c2s::{OutSendTextMessagePart, OutSendTextMessageMessage};
     use std::borrow::Cow;
+    use tsclientlib::messages::c2s::{OutSendTextMessageMessage, OutSendTextMessagePart};
 
     let max_len = 1024;
     let chunks: Vec<&str> = if message.len() <= max_len {

@@ -143,39 +143,50 @@ pub fn action_target(action: &crate::actions::BotAction) -> Option<String> {
     match action {
         BotAction::KickClient { client_name, .. } => Some(client_name.clone()),
         BotAction::BanClient { client_name, .. } => Some(client_name.clone()),
-        BotAction::MoveClient { client_name, channel_name } => {
-            Some(format!("{} -> {}", client_name, channel_name))
-        }
+        BotAction::MoveClient {
+            client_name,
+            channel_name,
+        } => Some(format!("{} -> {}", client_name, channel_name)),
         BotAction::MoveClientReturn { client_name } => Some(client_name.clone()),
         BotAction::PokeClient { client_name, .. } => Some(client_name.clone()),
         BotAction::SendMessage { target_name, .. } => Some(target_name.clone()),
         BotAction::CreateChannel { channel_name, .. } => Some(channel_name.clone()),
         BotAction::EditChannel { channel_name, .. } => Some(channel_name.clone()),
         BotAction::DeleteChannel { channel_name } => Some(channel_name.clone()),
-        BotAction::SetChannelAdmin { channel_name, client_name } => {
-            Some(format!("{} in {}", client_name.as_deref().unwrap_or("self"), channel_name))
-        }
-        BotAction::SetServerGroup { client_name, server_group_id } => {
-            Some(format!("{} +group {}", client_name, server_group_id))
-        }
-        BotAction::RemoveServerGroup { client_name, server_group_id } => {
-            Some(format!("{} -group {}", client_name, server_group_id))
-        }
+        BotAction::SetChannelAdmin {
+            channel_name,
+            client_name,
+        } => Some(format!(
+            "{} in {}",
+            client_name.as_deref().unwrap_or("self"),
+            channel_name
+        )),
+        BotAction::SetServerGroup {
+            client_name,
+            server_group_id,
+        } => Some(format!("{} +group {}", client_name, server_group_id)),
+        BotAction::RemoveServerGroup {
+            client_name,
+            server_group_id,
+        } => Some(format!("{} -group {}", client_name, server_group_id)),
         BotAction::EditChannelDescription { channel_id, .. } => {
             Some(format!("channel {}", channel_id))
         }
         BotAction::BanAdd { ip, uid, name, .. } => {
             let parts: Vec<&str> = [ip.as_deref(), uid.as_deref(), name.as_deref()]
-                .iter().filter_map(|o| *o).collect();
+                .iter()
+                .filter_map(|o| *o)
+                .collect();
             Some(format!("ban: {}", parts.join(", ")))
         }
         BotAction::BanDel { ban_id } => Some(format!("ban #{}", ban_id)),
         BotAction::BanDelAll => Some("all bans".to_string()),
         BotAction::BanList => Some("list bans".to_string()),
         BotAction::ClientEdit { client_name, .. } => Some(client_name.clone()),
-        BotAction::ChannelMoveAction { channel_name, parent_channel_name } => {
-            Some(format!("{} -> {}", channel_name, parent_channel_name))
-        }
+        BotAction::ChannelMoveAction {
+            channel_name,
+            parent_channel_name,
+        } => Some(format!("{} -> {}", channel_name, parent_channel_name)),
         BotAction::ChannelSubscribe { channel_name } => Some(channel_name.clone()),
         BotAction::ChannelUnsubscribe { channel_name } => Some(channel_name.clone()),
         BotAction::SendChannelMessage { channel_name, .. } => Some(channel_name.clone()),

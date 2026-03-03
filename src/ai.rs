@@ -13,16 +13,25 @@ pub struct ChatMessage {
 
 impl ChatMessage {
     pub fn system(content: impl Into<String>) -> Self {
-        Self { role: "system".into(), content: content.into() }
+        Self {
+            role: "system".into(),
+            content: content.into(),
+        }
     }
 
     pub fn user(content: impl Into<String>) -> Self {
-        Self { role: "user".into(), content: content.into() }
+        Self {
+            role: "user".into(),
+            content: content.into(),
+        }
     }
 
     #[allow(dead_code)]
     pub fn assistant(content: impl Into<String>) -> Self {
-        Self { role: "assistant".into(), content: content.into() }
+        Self {
+            role: "assistant".into(),
+            content: content.into(),
+        }
     }
 }
 
@@ -100,17 +109,16 @@ impl AiClient {
 
     /// Send a chat request using the primary model.
     /// If it fails or times out, automatically retry with the fallback model.
-    pub async fn chat(
-        &self,
-        system_prompt: &str,
-        history: &[ChatMessage],
-    ) -> Result<String> {
+    pub async fn chat(&self, system_prompt: &str, history: &[ChatMessage]) -> Result<String> {
         let mut messages = vec![ChatMessage::system(system_prompt)];
         messages.extend_from_slice(history);
 
         // ── Attempt 1: Default model ────────────────────────
         info!(model = %self.default_model, "Sending request to primary model");
-        match self.send_chat_request(&self.api_url, &self.api_key, &self.default_model, &messages).await {
+        match self
+            .send_chat_request(&self.api_url, &self.api_key, &self.default_model, &messages)
+            .await
+        {
             Ok(response) => {
                 info!(model = %self.default_model, "Primary model responded successfully");
                 return Ok(response);
@@ -126,11 +134,21 @@ impl AiClient {
 
         // ── Attempt 2: Fallback model ───────────────────────
         if self.fallback_model.is_empty() {
-            return Err(anyhow::anyhow!("Primary model failed and no fallback model is configured"));
+            return Err(anyhow::anyhow!(
+                "Primary model failed and no fallback model is configured"
+            ));
         }
 
         info!(model = %self.fallback_model, "Sending request to fallback model");
-        match self.send_chat_request(&self.fallback_api_url, &self.fallback_api_key, &self.fallback_model, &messages).await {
+        match self
+            .send_chat_request(
+                &self.fallback_api_url,
+                &self.fallback_api_key,
+                &self.fallback_model,
+                &messages,
+            )
+            .await
+        {
             Ok(response) => {
                 info!(model = %self.fallback_model, "Fallback model responded successfully");
                 Ok(response)
@@ -170,7 +188,7 @@ impl AiClient {
             .header("Content-Type", "application/json")
             .json(&request_body)
             .timeout(self.timeout);
-            
+
         if !api_key.trim().is_empty() {
             req = req.header("Authorization", format!("Bearer {}", api_key));
         }

@@ -2,12 +2,14 @@
 # Copy this file to `config.toml` and fill your own values.
 
 # TeamSpeak server address: host:port
+# Can also be overridden via env: TS3_BOT_SERVER_ADDRESS
 server_address = "ts3.example.com:9987"
 
 # Bot nickname shown in TeamSpeak
 bot_name = "TS3 AI Bot"
 
 # Optional default channel (ID or exact name).
+# Can also be overridden via env: TS3_BOT_CHANNEL
 channel = "123"
 
 # Identity key file path (generated automatically if missing)
@@ -70,9 +72,30 @@ code_output_channel_id = 51494
 piper_binary_path = "piper/piper/piper"
 piper_voice_dir = "piper/voices"
 
+# Media runtime binaries
+# Optional env overrides: TS3_BOT_FFMPEG_PATH, TS3_BOT_YT_DLP_PATH
+ffmpeg_binary_path = "ffmpeg"
+yt_dlp_binary_path = "yt-dlp"
+
+# Initial volume for music/radio playback (0-100)
+music_start_volume = 5
+
 # Self-assignable server groups for regular users
 [allowed_server_groups]
 "CS 1.6" = 56
-"CS2" = 57
+"CS:2" = 57
 "Valorant" = 180
+"LOL" = 58
+"DOTA" = 62
+"FORTNITE" = 60
 "Minecraft" = 112
+"PUBG" = 61
+"AMONG US" = 346
+"BEBO" = 471
+"PAYDAY" = 162
+"RageMP" = 835
+"SAMP" = 67
+"WOT" = 69
+"ZULA" = 59
+"Esea" = 176
+"Faceit" = 168

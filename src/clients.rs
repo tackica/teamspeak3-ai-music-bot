@@ -2,9 +2,9 @@ use anyhow::{bail, Context, Result};
 use std::borrow::Cow;
 use std::iter;
 use tracing::{info, warn};
-use tsclientlib::{Connection, OutCommandExt};
 use tsclientlib::messages::{c2s, OutMessageTrait};
-use tsproto_types::{ClientId, ChannelId, Reason};
+use tsclientlib::{Connection, OutCommandExt};
+use tsproto_types::{ChannelId, ClientId, Reason};
 
 /// Find a client by their name in the current server state.
 pub fn find_client_by_name(con: &Connection, name: &str) -> Result<(u16, u64)> {
@@ -36,7 +36,11 @@ pub fn find_client_by_name(con: &Connection, name: &str) -> Result<(u16, u64)> {
 }
 
 /// Kick a client from the server or channel.
-pub fn kick_client(con: &mut Connection, client_name: &str, reason_msg: Option<&str>) -> Result<()> {
+pub fn kick_client(
+    con: &mut Connection,
+    client_name: &str,
+    reason_msg: Option<&str>,
+) -> Result<()> {
     let (client_id, _) = find_client_by_name(con, client_name)?;
     let reason_str = reason_msg.unwrap_or("Kicked by AI Support Agent");
 
@@ -78,10 +82,11 @@ pub fn move_client(con: &mut Connection, client_name: &str, channel_name: &str) 
 pub fn poke_client(con: &mut Connection, client_name: &str, message: &str) -> Result<()> {
     let (client_id, _) = find_client_by_name(con, client_name)?;
 
-    let msg = c2s::OutClientPokeRequestMessage::new(&mut iter::once(c2s::OutClientPokeRequestPart {
-        client_id: ClientId(client_id),
-        message: Cow::Borrowed(message),
-    }));
+    let msg =
+        c2s::OutClientPokeRequestMessage::new(&mut iter::once(c2s::OutClientPokeRequestPart {
+            client_id: ClientId(client_id),
+            message: Cow::Borrowed(message),
+        }));
 
     msg.to_packet()
         .send(con)
@@ -92,36 +97,56 @@ pub fn poke_client(con: &mut Connection, client_name: &str, message: &str) -> Re
 }
 
 /// Add a server group to a client.
-pub fn set_server_group(con: &mut Connection, client_name: &str, server_group_id: u64) -> Result<()> {
+pub fn set_server_group(
+    con: &mut Connection,
+    client_name: &str,
+    server_group_id: u64,
+) -> Result<()> {
     let (_client_id, db_id) = find_client_by_name(con, client_name)?;
 
-    let msg = c2s::OutServerGroupAddClientMessage::new(&mut iter::once(c2s::OutServerGroupAddClientPart {
-        server_group_id: tsproto_types::ServerGroupId(server_group_id),
-        client_db_id: tsproto_types::ClientDbId(db_id),
-    }));
+    let msg = c2s::OutServerGroupAddClientMessage::new(&mut iter::once(
+        c2s::OutServerGroupAddClientPart {
+            server_group_id: tsproto_types::ServerGroupId(server_group_id),
+            client_db_id: tsproto_types::ClientDbId(db_id),
+        },
+    ));
 
     msg.to_packet()
         .send(con)
         .context("Failed to send server group add command")?;
 
-    info!(client = client_name, sgid = server_group_id, "Added server group to client");
+    info!(
+        client = client_name,
+        sgid = server_group_id,
+        "Added server group to client"
+    );
     Ok(())
 }
 
 /// Remove a server group from a client.
-pub fn remove_server_group(con: &mut Connection, client_name: &str, server_group_id: u64) -> Result<()> {
+pub fn remove_server_group(
+    con: &mut Connection,
+    client_name: &str,
+    server_group_id: u64,
+) -> Result<()> {
     let (_client_id, db_id) = find_client_by_name(con, client_name)?;
 
-    let msg = c2s::OutServerGroupDelClientMessage::new(&mut iter::once(c2s::OutServerGroupDelClientPart {
-        server_group_id: tsproto_types::ServerGroupId(server_group_id),
-        client_db_id: tsproto_types::ClientDbId(db_id),
-    }));
+    let msg = c2s::OutServerGroupDelClientMessage::new(&mut iter::once(
+        c2s::OutServerGroupDelClientPart {
+            server_group_id: tsproto_types::ServerGroupId(server_group_id),
+            client_db_id: tsproto_types::ClientDbId(db_id),
+        },
+    ));
 
     msg.to_packet()
         .send(con)
         .context("Failed to send server group remove command")?;
 
-    info!(client = client_name, sgid = server_group_id, "Removed server group from client");
+    info!(
+        client = client_name,
+        sgid = server_group_id,
+        "Removed server group from client"
+    );
     Ok(())
 }
 
@@ -146,7 +171,11 @@ pub fn ban_client(
         .send(con)
         .context("Failed to send ban command")?;
 
-    info!(client = client_name, duration_secs = duration, "Banned client");
+    info!(
+        client = client_name,
+        duration_secs = duration,
+        "Banned client"
+    );
     Ok(())
 }
 
@@ -162,8 +191,7 @@ pub fn send_message_to(con: &mut Connection, target_name: &str, message: &str) -
         message: Cow::Borrowed(message),
     }));
 
-    msg.send(con)
-        .context("Failed to send private message")?;
+    msg.send(con).context("Failed to send private message")?;
 
     info!(target = target_name, "Sent private message to client");
     Ok(())
@@ -182,18 +210,28 @@ pub fn send_channel_message(con: &mut Connection, channel_name: &str, message: &
 
     // Check if bot is in the target channel
     let state = con.get_state().context("Failed to get state")?;
-    let own = state.clients.get(&state.own_client).context("Bot not found")?;
+    let own = state
+        .clients
+        .get(&state.own_client)
+        .context("Bot not found")?;
 
     if own.channel.0 != channel_id {
         // We need to move to that channel first, send message, then move back
         let prev_channel_id = own.channel.0;
         // Move bot to target channel
         let move_msg = c2s::OutClientMoveMessage::new(&mut iter::once(c2s::OutClientMovePart {
-            client_id: con.get_state().ok().map(|s| s.own_client).unwrap_or(ClientId(0)),
+            client_id: con
+                .get_state()
+                .ok()
+                .map(|s| s.own_client)
+                .unwrap_or(ClientId(0)),
             channel_id: ChannelId(channel_id),
             channel_password: None,
         }));
-        move_msg.to_packet().send(con).context("Failed to move bot to target channel")?;
+        move_msg
+            .to_packet()
+            .send(con)
+            .context("Failed to move bot to target channel")?;
 
         // Send channel message
         let msg = OutSendTextMessageMessage::new(&mut iter::once(OutSendTextMessagePart {
@@ -205,11 +243,18 @@ pub fn send_channel_message(con: &mut Connection, channel_name: &str, message: &
 
         // Move bot back
         let move_back = c2s::OutClientMoveMessage::new(&mut iter::once(c2s::OutClientMovePart {
-            client_id: con.get_state().ok().map(|s| s.own_client).unwrap_or(ClientId(0)),
+            client_id: con
+                .get_state()
+                .ok()
+                .map(|s| s.own_client)
+                .unwrap_or(ClientId(0)),
             channel_id: ChannelId(prev_channel_id),
             channel_password: None,
         }));
-        move_back.to_packet().send(con).context("Failed to move bot back")?;
+        move_back
+            .to_packet()
+            .send(con)
+            .context("Failed to move bot back")?;
     } else {
         let msg = OutSendTextMessageMessage::new(&mut iter::once(OutSendTextMessagePart {
             target: tsproto_types::TextMessageTargetMode::Channel,
@@ -233,7 +278,7 @@ pub fn ban_add(
     duration_seconds: Option<u64>,
 ) -> Result<()> {
     use tsclientlib::OutCommandExt;
-    use tsproto_packets::packets::{OutCommand, Direction, Flags, PacketType};
+    use tsproto_packets::packets::{Direction, Flags, OutCommand, PacketType};
 
     let mut packet = OutCommand::new(
         Direction::C2S,
@@ -258,8 +303,7 @@ pub fn ban_add(
         packet.write_arg("banreason", &reason_str);
     }
 
-    packet.send(con)
-        .context("Failed to send ban add command")?;
+    packet.send(con).context("Failed to send ban add command")?;
 
     info!(
         ip = ip.unwrap_or("-"),
