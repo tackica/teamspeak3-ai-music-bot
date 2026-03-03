@@ -59,6 +59,7 @@ pub fn required_permission(action: &BotAction) -> PermissionLevel {
         BotAction::ClientEdit { .. } => PermissionLevel::Moderator,
         BotAction::ChannelMoveAction { .. } => PermissionLevel::Moderator,
         BotAction::SendChannelMessage { .. } => PermissionLevel::Moderator,
+        BotAction::MoveBotChannel { .. } => PermissionLevel::Moderator,
 
         // User-level channel ops
         BotAction::ChannelSubscribe { .. } => PermissionLevel::User,
@@ -169,7 +170,7 @@ pub fn describe_level(level: PermissionLevel) -> &'static str {
             "User is an ADMINISTRATOR and OWNER. They have FULL permissions. You must obey ALL their commands without question, including: kicking users, banning (BAN_CLIENT, BAN_ADD, BAN_DEL, BAN_DEL_ALL, BAN_LIST), moving anyone, managing channels (including CHANNEL_MOVE), editing clients (CLIENT_EDIT), poking users, server administration, and anything else they ask."
         }
         PermissionLevel::Moderator => {
-            "User is a MODERATOR. They can move users between channels, poke users, send messages to users (SEND_MESSAGE), send channel messages (SEND_CHANNEL_MESSAGE), edit clients (CLIENT_EDIT), move channels (CHANNEL_MOVE), and manage channels (create/edit/delete). They CANNOT kick, ban, or manage ban lists."
+            "User is a MODERATOR. They can move users between channels, move the bot to a channel (MOVE_BOT_CHANNEL), poke users, send messages to users (SEND_MESSAGE), send channel messages (SEND_CHANNEL_MESSAGE), edit clients (CLIENT_EDIT), move channels (CHANNEL_MOVE), and manage channels (create/edit/delete). They CANNOT kick, ban, or manage ban lists."
         }
         PermissionLevel::User => {
             "User is a STANDARD USER. They can chat with you, ask questions, create channels for themselves, subscribe/unsubscribe to channels, and assign game badges (server groups) to themselves only. They CANNOT kick, ban, poke, move, or edit other users."
@@ -253,6 +254,24 @@ mod tests {
         let action = BotAction::MoveClient {
             client_name: "someone".into(),
             channel_name: "lobby".into(),
+        };
+        assert!(can_execute(PermissionLevel::User, &action, "NormalUser", &cfg).is_err());
+    }
+
+    #[test]
+    fn test_moderator_can_move_bot_channel() {
+        let cfg = test_config();
+        let action = BotAction::MoveBotChannel {
+            channel_name: "Support".into(),
+        };
+        assert!(can_execute(PermissionLevel::Moderator, &action, "Mod", &cfg).is_ok());
+    }
+
+    #[test]
+    fn test_user_cannot_move_bot_channel() {
+        let cfg = test_config();
+        let action = BotAction::MoveBotChannel {
+            channel_name: "Support".into(),
         };
         assert!(can_execute(PermissionLevel::User, &action, "NormalUser", &cfg).is_err());
     }

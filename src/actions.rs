@@ -138,6 +138,12 @@ pub enum BotAction {
         channel_name: String,
         message: String,
     },
+
+    /// Move the bot itself to a specific channel and stay there.
+    MoveBotChannel {
+        channel_name: String,
+    },
+
     PlayTTS {
         text: String,
     },
@@ -532,6 +538,15 @@ fn convert_payload(payload: ActionPayload) -> Option<BotAction> {
                 channel_name,
                 message,
             })
+        }
+
+        "MOVE_BOT_CHANNEL" => {
+            let channel_name = payload.channel_name.unwrap_or_default();
+            if channel_name.is_empty() {
+                warn!("MOVE_BOT_CHANNEL action missing channel_name, skipping");
+                return None;
+            }
+            Some(BotAction::MoveBotChannel { channel_name })
         }
 
         "PLAY_TTS" => {
@@ -935,5 +950,16 @@ Here you go!"#;
         assert_eq!(actions.len(), 2);
         assert!(matches!(actions[0], BotAction::SetVolume { volume: 30 }));
         assert!(matches!(actions[1], BotAction::PlayTTS { .. }));
+    }
+
+    #[test]
+    fn test_parse_move_bot_channel_action() {
+        let raw = r#"{"action": "MOVE_BOT_CHANNEL", "channel_name": "Support"}"#;
+        let actions = parse_ai_response(raw);
+        assert_eq!(actions.len(), 1);
+        match &actions[0] {
+            BotAction::MoveBotChannel { channel_name } => assert_eq!(channel_name, "Support"),
+            _ => panic!("Expected MoveBotChannel action"),
+        }
     }
 }

@@ -78,6 +78,38 @@ pub fn move_client(con: &mut Connection, client_name: &str, channel_name: &str) 
     Ok(())
 }
 
+/// Move the bot itself to a specific channel and stay there.
+pub fn move_bot_to_channel(con: &mut Connection, channel_name: &str) -> Result<()> {
+    let channel_id = crate::channels::find_channel_by_name(con, channel_name)?;
+
+    let own_client_id = {
+        let state = con.get_state().context("Failed to get state")?;
+        let own = state
+            .clients
+            .get(&state.own_client)
+            .context("Bot not found")?;
+        if own.channel.0 == channel_id {
+            info!(channel = channel_name, "Bot is already in target channel");
+            return Ok(());
+        }
+        state.own_client
+    };
+
+    let move_msg = c2s::OutClientMoveMessage::new(&mut iter::once(c2s::OutClientMovePart {
+        client_id: own_client_id,
+        channel_id: ChannelId(channel_id),
+        channel_password: None,
+    }));
+
+    move_msg
+        .to_packet()
+        .send(con)
+        .context("Failed to move bot to target channel")?;
+
+    info!(channel = channel_name, "Moved bot to channel");
+    Ok(())
+}
+
 /// Poke a client with a message.
 pub fn poke_client(con: &mut Connection, client_name: &str, message: &str) -> Result<()> {
     let (client_id, _) = find_client_by_name(con, client_name)?;

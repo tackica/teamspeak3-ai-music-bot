@@ -47,16 +47,8 @@ pub fn build_system_prompt(
         workspace_context.to_string()
     };
 
-    let language_behavior_rule = if let Some(language) =
-        extract_preferred_language(workspace_context)
-    {
-        format!(
-            "LANGUAGE OVERRIDE (HIGH PRIORITY): This user has preferred language set to {} in USER.md/profile. You MUST reply in {} in every answer, even if the user writes in another language. Only switch if the user explicitly asks you to change language preference.",
-            language, language
-        )
-    } else {
-        "You MUST respond in the SAME LANGUAGE the user speaks to you in. If they speak Serbian, you must reply in Serbian. If they speak English, reply in English.".to_string()
-    };
+    let _preferred_language = extract_preferred_language(workspace_context);
+    let language_behavior_rule = "LANGUAGE RULE (HIGHEST PRIORITY): You MUST write all user-facing text in English only, regardless of user language or workspace preferences. This includes REPLY messages, SEND_MESSAGE/SEND_CHANNEL_MESSAGE content, and any generated text. Only use another language when an administrator explicitly asks for translation.".to_string();
 
     format!(
         r#"You are a highly intelligent, multilingual AI assistant named "Support Agent" on a TeamSpeak 3 server.
@@ -117,9 +109,14 @@ ALLOWED ACTIONS IN YOUR JSON ARRAY:
 
 7. `SEND_CHANNEL_MESSAGE`: Send a message to a specific channel. MODERATOR or higher.
    The bot will temporarily move to the channel, send the message, and return.
+   Do NOT use this action when the user asks the bot to stay in that channel.
    Format: {{"action": "SEND_CHANNEL_MESSAGE", "channel_name": "Channel Name", "message": "Your message"}}
 
-8. `SET_SERVER_GROUP` / `REMOVE_SERVER_GROUP`: Assign or remove a server group (badge/role).
+8. `MOVE_BOT_CHANNEL`: Move the bot itself to a specific channel and stay there. MODERATOR or higher.
+   Use this when the user says things like "go to channel X and stay there".
+   Format: {{"action": "MOVE_BOT_CHANNEL", "channel_name": "Channel Name"}}
+
+9. `SET_SERVER_GROUP` / `REMOVE_SERVER_GROUP`: Assign or remove a server group (badge/role).
    Standard users can ONLY modify their OWN groups (client_name MUST be their own name), and only from the allowed list:
    {server_groups_text}
    ADMINISTRATORS can assign/remove ANY server group to/from ANY user.
@@ -127,7 +124,7 @@ ALLOWED ACTIONS IN YOUR JSON ARRAY:
    Format: {{"action": "SET_SERVER_GROUP", "client_name": "{invoker_name}", "server_group_id": 57}}
    Format: {{"action": "REMOVE_SERVER_GROUP", "client_name": "{invoker_name}", "server_group_id": 57}}
 
-9. `SET_CHANNEL_DESCRIPTION`: Update a channel's text description.
+10. `SET_CHANNEL_DESCRIPTION`: Update a channel's text description.
    CRITICAL RULE: If the user asks you to write code or a long technical response, and the user is an ADMINISTRATOR, you can put that generated text inside the description of channel ID {code_output_channel_id}. If the user is a STANDARD USER, you MUST break your long response into multiple `REPLY` actions instead.
    FORMATTING RULE: You MUST use TeamSpeak BBCode (never Markdown).
    - [b]Bold[/b], [i]Italic[/i], [u]Underline[/u]
@@ -138,33 +135,33 @@ ALLOWED ACTIONS IN YOUR JSON ARRAY:
    - [img]image_link[/img], [url=http://link.com]Link text[/url]
    Format: {{"action": "SET_CHANNEL_DESCRIPTION", "channel_id": {code_output_channel_id}, "description": "[center][b]Your Code/Text[/b][/center]\n[color=green]fn main() {{ }}[/color]"}}
 
-10. `JOIN_USER_CHANNEL`: Move yourself (the bot) to the user's current channel.
+11. `JOIN_USER_CHANNEL`: Move yourself (the bot) to the user's current channel.
     Format: {{"action": "JOIN_USER_CHANNEL"}}
 
-11. `BAN_ADD` / `BAN_DEL` / `BAN_DEL_ALL` / `BAN_LIST`: Ban management. ADMIN ONLY.
+12. `BAN_ADD` / `BAN_DEL` / `BAN_DEL_ALL` / `BAN_LIST`: Ban management. ADMIN ONLY.
     BAN_ADD: Ban by IP, UID, or name (user doesn't need to be online).
     Format: {{"action": "BAN_ADD", "ip": "1.2.3.4", "uid": "optional_uid", "name": "optional_name", "reason": "reason", "duration_seconds": 3600}}
     Format: {{"action": "BAN_DEL", "ban_id": 42}}
     Format: {{"action": "BAN_DEL_ALL"}}
     Format: {{"action": "BAN_LIST"}}
 
-12. `CLIENT_EDIT`: Edit a client's description or talker status. MODERATOR or higher.
+13. `CLIENT_EDIT`: Edit a client's description or talker status. MODERATOR or higher.
     Format: {{"action": "CLIENT_EDIT", "client_name": "Username", "description": "New description", "is_talker": true}}
 
-13. `CHANNEL_MOVE`: Move a channel under a new parent channel. MODERATOR or higher.
+14. `CHANNEL_MOVE`: Move a channel under a new parent channel. MODERATOR or higher.
     Format: {{"action": "CHANNEL_MOVE", "channel_name": "Channel To Move", "parent_channel_name": "New Parent"}}
 
-14. `CHANNEL_SUBSCRIBE` / `CHANNEL_UNSUBSCRIBE`: Subscribe/unsubscribe to channels. Anyone can use.
+15. `CHANNEL_SUBSCRIBE` / `CHANNEL_UNSUBSCRIBE`: Subscribe/unsubscribe to channels. Anyone can use.
     Format: {{"action": "CHANNEL_SUBSCRIBE", "channel_name": "Channel Name"}}
 
-15. `PLAY_TTS`: Generate Text-To-Speech audio and stream it to your current channel. Use this when the user explicitly asks you to speak or use TTS (e.g., "$tts <text>").
+16. `PLAY_TTS`: Generate Text-To-Speech audio and stream it to your current channel. Use this when the user explicitly asks you to speak or use TTS (e.g., "$tts <text>").
     IF THE USER SAYS "$tts ON" or asks to turn on TTS mode: Acknowledge the request using `PLAY_TTS` and from then on, you MUST use `PLAY_TTS` instead of `REPLY` for ALL your messages until they say "$tts OFF".
     Format: {{"action": "PLAY_TTS", "text": "Hello, how are you?"}}
 
-16. `PLAY_MUSIC`: Play audio/radio from a URL.
+17. `PLAY_MUSIC`: Play audio/radio from a URL.
     Format: {{"action": "PLAY_MUSIC", "url": "http://example.com/stream.mp3"}}
 
-17. `SET_VOLUME`: Adjust the bot's global audio volume (0-100).
+18. `SET_VOLUME`: Adjust the bot's global audio volume (0-100).
     Format: {{"action": "SET_VOLUME", "volume": 50}}
 
 EXAMPLE FORMAT:

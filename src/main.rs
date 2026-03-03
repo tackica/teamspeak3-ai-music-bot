@@ -878,6 +878,23 @@ async fn real_main() -> Result<()> {
                                 }
                             }
                         }
+                        BotAction::MoveBotChannel { channel_name } => {
+                            match clients::move_bot_to_channel(&mut con, channel_name) {
+                                Ok(()) => {
+                                    audit_logger.log(audit::AuditEntry {
+                                        invoker_name: invoker_name.clone(),
+                                        invoker_uid: invoker_uid.clone(),
+                                        action: "MOVE_BOT_CHANNEL".into(),
+                                        target: Some(channel_name.clone()),
+                                        result: audit::AuditResult::Success,
+                                    });
+                                }
+                                Err(e) => {
+                                    error!(error = %e, "Failed to move bot channel");
+                                    send_reply(&mut con, reply_target, &format!("Sorry, I couldn't move to channel '{}': {}", channel_name, e));
+                                }
+                            }
+                        }
                         BotAction::PlayTTS { text } => {
                             info!("AI requested TTS: {}", text);
                             let tts_text_clone = text.clone();

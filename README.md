@@ -16,6 +16,13 @@ Rust TeamSpeak 3 bot with:
 - per-user workspace memory and auto-learning
 - audit logging for sensitive actions
 
+## Community
+
+- This project is experimental and may change quickly.
+- Have an idea, bug report, or improvement? Open an Issue.
+- Please read `CONTRIBUTING.md` before submitting a PR.
+- License: `MIT` (`LICENSE`).
+
 ## What is safe to commit
 
 Track these files in git:
