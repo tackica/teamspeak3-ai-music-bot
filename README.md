@@ -156,7 +156,16 @@ Expected runtime profile:
 - AI requests: short CPU/network spikes
 - TTS/music: highest CPU usage (Piper + ffmpeg/Opus encoding)
 
-We should replace these estimates with measured numbers on your target host after load testing.
+Measured baseline on this host (8 vCPU, 7.7 GiB RAM, 45s connected idle run):
+
+- CPU: avg `0.36%`, peak `4.0%`
+- Memory (RSS): avg `18.53 MiB`, peak `18.57 MiB`
+- Virtual memory (VSZ): ~`686 MiB`
+- Release binary size: `16 MiB` (`target/release/ts3-ai-bot`)
+- Local runtime data during test: `workspace` `64 KiB`, `identities.json` `448 KiB`, others near `4 KiB`
+- Optional Piper assets on this machine: `~513 MiB` (`piper/`)
+
+Important: these are idle numbers; real load (AI/TTS/music) can be significantly higher.
 
 ## Profiling checklist (when you are ready)
 
