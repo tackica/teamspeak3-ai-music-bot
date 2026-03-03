@@ -3,4 +3,4 @@ set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
 
-python3 "$repo_root/scripts/secret_guard.py" staged
+python3 "$repo_root/secret_guard.py" staged

@@ -104,7 +104,7 @@ Note: build artifacts are generated in `target/` and are ignored by Git.
 
 5. Install local git hooks (recommended, one-time):
 
-   - `./scripts/install_git_hooks.sh`
+   - `./install_git_hooks.sh`
 
 ## Runtime files behavior
 
@@ -139,7 +139,7 @@ Local hooks and CI guard now block common secret leaks before push.
 
 If hooks are not installed yet:
 
-- `./scripts/install_git_hooks.sh`
+- `./install_git_hooks.sh`
 
 Before every push:
 
@@ -154,11 +154,11 @@ Before every push:
 ## Secret guard (pre-commit + pre-push)
 
 - Local hook templates live in `githooks/pre-commit` and `githooks/pre-push`.
-- The scanner is `scripts/secret_guard.py`.
+- The scanner is `secret_guard.py`.
 - Manual checks:
-  - staged changes: `python3 scripts/secret_guard.py staged`
-  - branch/range: `python3 scripts/secret_guard.py range origin/main..HEAD`
-  - full history: `python3 scripts/secret_guard.py history`
+  - staged changes: `python3 secret_guard.py staged`
+  - branch/range: `python3 secret_guard.py range origin/main..HEAD`
+  - full history: `python3 secret_guard.py history`
 - False-positive exceptions:
   - repo-wide rules in `.secret-allowlist`
   - local-only rules in `.secret-allowlist.local` (ignored by git)
