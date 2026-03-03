@@ -11,9 +11,51 @@ use tsproto_packets::packets::{AudioData, CodecType, OutAudio, OutPacket};
 use whatlang::{detect, Lang};
 
 static VOLUME: AtomicU8 = AtomicU8::new(100);
-static BASS: AtomicU8 = AtomicU8::new(1);
+static BASS_PRESET: AtomicU8 = AtomicU8::new(BassPreset::Off as u8);
 /// When true, TTS is actively playing — music should pause
 static DUCKING: AtomicBool = AtomicBool::new(false);
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(u8)]
+pub enum BassPreset {
+    Off = 0,
+    Low = 1,
+    Medium = 2,
+    High = 3,
+    XHigh = 4,
+}
+
+impl BassPreset {
+    fn from_raw(value: u8) -> Self {
+        match value {
+            1 => Self::Low,
+            2 => Self::Medium,
+            3 => Self::High,
+            4 => Self::XHigh,
+            _ => Self::Off,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Off => "off",
+            Self::Low => "low",
+            Self::Medium => "medium",
+            Self::High => "high",
+            Self::XHigh => "xhigh",
+        }
+    }
+
+    fn gain(self) -> f32 {
+        match self {
+            Self::Off => 0.0,
+            Self::Low => 0.45,
+            Self::Medium => 0.95,
+            Self::High => 1.6,
+            Self::XHigh => 2.4,
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct TtsConfig {
@@ -32,12 +74,25 @@ pub fn get_volume() -> u8 {
     VOLUME.load(Ordering::SeqCst)
 }
 
-pub fn set_bass(v: u8) {
-    BASS.store(v.clamp(1, 100), Ordering::SeqCst);
+pub fn set_bass_preset(preset: BassPreset) {
+    BASS_PRESET.store(preset as u8, Ordering::SeqCst);
 }
 
-pub fn get_bass() -> u8 {
-    BASS.load(Ordering::SeqCst)
+pub fn get_bass_preset() -> BassPreset {
+    BassPreset::from_raw(BASS_PRESET.load(Ordering::SeqCst))
+}
+
+pub fn parse_bass_preset(value: &str) -> Option<BassPreset> {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "off" | "none" => Some(BassPreset::Off),
+        "low" => Some(BassPreset::Low),
+        "medium" | "med" => Some(BassPreset::Medium),
+        "high" => Some(BassPreset::High),
+        "xhigh" | "x-high" | "x_high" | "extra-high" | "extrahigh" | "max" => {
+            Some(BassPreset::XHigh)
+        }
+        _ => None,
+    }
 }
 
 pub fn set_ducking(active: bool) {
@@ -55,8 +110,23 @@ const FRAME_SIZE: usize = 960;
 const TTS_MAX_SEGMENT_CHARS: usize = 240;
 const TTS_SEGMENT_PAUSE_SAMPLES: usize = (48_000 * 120) / 1000;
 const TTS_LEAD_IN_SAMPLES: usize = (48_000 * 50) / 1000;
-const BASS_FILTER_ALPHA: f32 = 0.045;
-const BASS_MAX_BOOST_GAIN: f32 = 1.2;
+const BASS_FILTER_ALPHA: f32 = 0.008;
+const BASS_DC_BLOCK_ALPHA: f32 = 0.0025;
+const BASS_HEADROOM_COEFF: f32 = 0.20;
+const SOFT_LIMIT_THRESHOLD: f32 = 0.92;
+const SOFT_LIMIT_CURVE: f32 = 2.2;
+
+fn soft_limit_normalized(x: f32) -> f32 {
+    let ax = x.abs();
+    if ax <= SOFT_LIMIT_THRESHOLD {
+        return x;
+    }
+
+    let excess = (ax - SOFT_LIMIT_THRESHOLD) / (1.0 - SOFT_LIMIT_THRESHOLD);
+    let shaped =
+        SOFT_LIMIT_THRESHOLD + (1.0 - SOFT_LIMIT_THRESHOLD) * (excess * SOFT_LIMIT_CURVE).tanh();
+    x.signum() * shaped.min(1.0)
+}
 
 fn voice_model_path(voice_dir: &str, filename: &str) -> String {
     format!("{}/{}", voice_dir.trim_end_matches('/'), filename)
@@ -579,7 +649,9 @@ pub async fn stream_url_to_ts(
         let mut packet_id: u16 = 0;
         let mut interval = tokio::time::interval(std::time::Duration::from_millis(20));
         interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        let mut bass_low_state = 0.0f32;
+        let mut bass_low_state_1 = 0.0f32;
+        let mut bass_low_state_2 = 0.0f32;
+        let mut bass_dc_state = 0.0f32;
 
         // Pre-buffering: Wait until we have at least 1 second of audio
         let mut prebuffered = false;
@@ -623,25 +695,21 @@ pub async fn stream_url_to_ts(
             // Apply volume
             let vol = get_volume() as f32 / 100.0;
 
-            // Apply bass boost (1-100) only to music stream.
-            // 1 means neutral (no boost), 100 means strongest boost.
-            let bass_level = get_bass();
-            let bass_gain = if bass_level > 1 {
-                ((bass_level as f32 - 1.0) / 99.0) * BASS_MAX_BOOST_GAIN
-            } else {
-                0.0
-            };
+            let bass_gain = get_bass_preset().gain();
+            let headroom_scale = 1.0 / (1.0 + bass_gain * BASS_HEADROOM_COEFF * vol.max(0.2));
 
             for s in samples.iter_mut() {
-                let mut sample = *s as f32 * vol;
+                let dry = *s as f32 * vol;
+                bass_low_state_1 += BASS_FILTER_ALPHA * (dry - bass_low_state_1);
+                bass_low_state_2 += BASS_FILTER_ALPHA * (bass_low_state_1 - bass_low_state_2);
+                bass_dc_state += BASS_DC_BLOCK_ALPHA * (bass_low_state_2 - bass_dc_state);
 
-                bass_low_state += BASS_FILTER_ALPHA * (sample - bass_low_state);
+                let bass_component = bass_low_state_2 - bass_dc_state;
+                let boosted = dry + bass_component * bass_gain;
+                let normalized = (boosted * headroom_scale / i16::MAX as f32).clamp(-8.0, 8.0);
+                let limited = soft_limit_normalized(normalized);
 
-                if bass_gain > 0.0 {
-                    sample += bass_low_state * bass_gain;
-                }
-
-                *s = sample.clamp(i16::MIN as f32, i16::MAX as f32) as i16;
+                *s = (limited * i16::MAX as f32) as i16;
             }
 
             match encoder.encode(&samples, &mut opus_buf) {

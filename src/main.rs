@@ -94,6 +94,13 @@ struct PendingCreation {
     created_at: Instant,
 }
 
+struct MusicPlaybackState {
+    stop_flag: Arc<AtomicBool>,
+    requested_by_uid: String,
+    requested_by_name: String,
+    source_label: String,
+}
+
 const GLOBAL_AI_QUEUE_CAPACITY: usize = 200;
 
 #[derive(Debug, Clone)]
@@ -322,7 +329,7 @@ async fn real_main() -> Result<()> {
     let admin_uids_for_alerts = cfg.admin_uids.clone();
 
     // Music bot state
-    let mut current_music_stop_flag: Option<Arc<AtomicBool>> = None;
+    let mut current_music_state: Option<MusicPlaybackState> = None;
 
     {
         let ai_client_worker = Arc::clone(&ai_client);
@@ -1028,11 +1035,16 @@ async fn real_main() -> Result<()> {
                         }
                         BotAction::PlayMusic { url } => {
                             info!("AI requested Music: {}", url);
-                            if let Some(old_flag) = current_music_stop_flag.take() {
-                                old_flag.store(true, Ordering::SeqCst);
+                            if let Some(old_state) = current_music_state.take() {
+                                old_state.stop_flag.store(true, Ordering::SeqCst);
                             }
                             let new_stop_flag = Arc::new(AtomicBool::new(false));
-                            current_music_stop_flag = Some(new_stop_flag.clone());
+                            current_music_state = Some(MusicPlaybackState {
+                                stop_flag: new_stop_flag.clone(),
+                                requested_by_uid: invoker_uid.clone(),
+                                requested_by_name: invoker_name.clone(),
+                                source_label: url.clone(),
+                            });
 
                             let music_tx = audio_tx.clone();
                             let url_clone = url.clone();
@@ -1462,11 +1474,16 @@ async fn real_main() -> Result<()> {
                                     info!(url = %url, invoker = %invoker_name, "Manual play requested");
 
                                     // Stop previous
-                                    if let Some(old_flag) = current_music_stop_flag.take() {
-                                        old_flag.store(true, Ordering::SeqCst);
+                                    if let Some(old_state) = current_music_state.take() {
+                                        old_state.stop_flag.store(true, Ordering::SeqCst);
                                     }
                                     let new_stop_flag = Arc::new(AtomicBool::new(false));
-                                    current_music_stop_flag = Some(new_stop_flag.clone());
+                                    current_music_state = Some(MusicPlaybackState {
+                                        stop_flag: new_stop_flag.clone(),
+                                        requested_by_uid: user_uid.clone(),
+                                        requested_by_name: invoker_name.clone(),
+                                        source_label: url.clone(),
+                                    });
                                     let music_tx = audio_tx.clone();
                                     let url_clone = url.clone();
                                     let tts_config_clone = tts_config.clone();
@@ -1480,14 +1497,27 @@ async fn real_main() -> Result<()> {
                                     continue;
                                 }
 
-                                // $stop — Admin only
+                                // $stop — only the user who started current playback can stop it
                                 if raw_message == "$stop" {
-                                    if !is_admin {
-                                        send_private_reply(&mut con, invoker.id, admin_denied_msg);
+                                    let Some(active_state) = current_music_state.as_ref() else {
+                                        send_private_reply(&mut con, invoker.id, "No active music stream to stop.");
+                                        continue;
+                                    };
+
+                                    if active_state.requested_by_uid != user_uid {
+                                        send_private_reply(
+                                            &mut con,
+                                            invoker.id,
+                                            &format!(
+                                                "Only '{}' can stop the current stream ({}).",
+                                                active_state.requested_by_name, active_state.source_label
+                                            ),
+                                        );
                                         continue;
                                     }
-                                    if let Some(old_flag) = current_music_stop_flag.take() {
-                                        old_flag.store(true, Ordering::SeqCst);
+
+                                    if let Some(old_state) = current_music_state.take() {
+                                        old_state.stop_flag.store(true, Ordering::SeqCst);
                                     }
                                     send_private_reply(&mut con, invoker.id, "Music stopped.");
                                     continue;
@@ -1523,30 +1553,27 @@ async fn real_main() -> Result<()> {
                                     }
                                     let content = raw_message.trim_start_matches("$bass").trim();
                                     if content.is_empty() {
+                                        let preset = audio::get_bass_preset();
                                         send_private_reply(
                                             &mut con,
                                             invoker.id,
                                             &format!(
-                                                "Current bass: {}%. Use `$bass [1-100]` while music is playing.",
-                                                audio::get_bass()
+                                                "Current bass preset: {}. Use `$bass off|low|medium|high|xhigh`.",
+                                                preset.as_str()
                                             ),
                                         );
-                                    } else if let Ok(v) = content.parse::<u8>() {
-                                        if (1..=100).contains(&v) {
-                                            audio::set_bass(v);
-                                            send_private_reply(
-                                                &mut con,
-                                                invoker.id,
-                                                &format!(
-                                                    "Bass set to {}%. Applied immediately to music playback.",
-                                                    v
-                                                ),
-                                            );
-                                        } else {
-                                            send_private_reply(&mut con, invoker.id, "Bass must be between 1 and 100.");
-                                        }
+                                    } else if let Some(preset) = audio::parse_bass_preset(content) {
+                                        audio::set_bass_preset(preset);
+                                        send_private_reply(
+                                            &mut con,
+                                            invoker.id,
+                                            &format!(
+                                                "Bass preset set to '{}'. Applied immediately to music playback.",
+                                                preset.as_str()
+                                            ),
+                                        );
                                     } else {
-                                        send_private_reply(&mut con, invoker.id, "Invalid value. Use `$bass [1-100]`.");
+                                        send_private_reply(&mut con, invoker.id, "Invalid bass preset. Use `$bass off|low|medium|high|xhigh`.");
                                     }
                                     continue;
                                 }
@@ -1585,11 +1612,16 @@ async fn real_main() -> Result<()> {
                                         info!(station = %station_name, url = %url, invoker = %invoker_name, "Radio play requested");
 
                                         // Stop previous
-                                        if let Some(old_flag) = current_music_stop_flag.take() {
-                                            old_flag.store(true, Ordering::SeqCst);
+                                        if let Some(old_state) = current_music_state.take() {
+                                            old_state.stop_flag.store(true, Ordering::SeqCst);
                                         }
                                         let new_stop_flag = Arc::new(AtomicBool::new(false));
-                                        current_music_stop_flag = Some(new_stop_flag.clone());
+                                        current_music_state = Some(MusicPlaybackState {
+                                            stop_flag: new_stop_flag.clone(),
+                                            requested_by_uid: user_uid.clone(),
+                                            requested_by_name: invoker_name.clone(),
+                                            source_label: station_name.clone(),
+                                        });
                                         let music_tx = audio_tx.clone();
                                         let url_clone = url.clone();
                                         let tts_config_clone = tts_config.clone();

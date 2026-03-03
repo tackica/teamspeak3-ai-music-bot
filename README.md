@@ -131,9 +131,9 @@ Note: build artifacts are generated in `target/` and are ignored by Git.
   - `$ticket close <id>`
 - Music:
   - `$play <url>`
-  - `$stop`
+  - `$stop` (only the user who started current playback)
   - `$vol [0-100]`
-  - `$bass [1-100]`
+  - `$bass off|low|medium|high|xhigh`
 - Radio presets:
   - `$radios`
   - `$radio <name>`
