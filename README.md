@@ -102,6 +102,10 @@ Note: build artifacts are generated in `target/` and are ignored by Git.
 
    - `./start_bot.sh` (auto-loads `.env` when present)
 
+5. Install local git hooks (recommended, one-time):
+
+   - `./scripts/install_git_hooks.sh`
+
 ## Runtime files behavior
 
 - If `tickets.json`, `identities.json`, or `radios.json` do not exist, the bot starts with empty in-memory defaults.
@@ -131,6 +135,12 @@ Note: build artifacts are generated in `target/` and are ignored by Git.
 
 ## Publish safely to GitHub
 
+Local hooks and CI guard now block common secret leaks before push.
+
+If hooks are not installed yet:
+
+- `./scripts/install_git_hooks.sh`
+
 Before every push:
 
 1. Check tracked files:
@@ -140,6 +150,18 @@ Before every push:
 3. Verify templates only:
    - keep keys empty in `config.example.toml` and `.env.example`
 4. Rotate any key that was ever exposed outside local machine.
+
+## Secret guard (pre-commit + pre-push)
+
+- Local hook templates live in `githooks/pre-commit` and `githooks/pre-push`.
+- The scanner is `scripts/secret_guard.py`.
+- Manual checks:
+  - staged changes: `python3 scripts/secret_guard.py staged`
+  - branch/range: `python3 scripts/secret_guard.py range origin/main..HEAD`
+  - full history: `python3 scripts/secret_guard.py history`
+- False-positive exceptions:
+  - repo-wide rules in `.secret-allowlist`
+  - local-only rules in `.secret-allowlist.local` (ignored by git)
 
 ## Resource usage and minimum specs (preliminary)
 

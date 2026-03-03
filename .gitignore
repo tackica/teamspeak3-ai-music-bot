@@ -6,6 +6,7 @@
 /.env
 /.env.*
 !/.env.example
+/.secret-allowlist.local
 
 # Runtime state / private data
 /identity.key
